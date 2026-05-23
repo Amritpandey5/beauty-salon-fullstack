@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --gold: #c9a227;
+    --gold-light: #e4c52a;
+    --gold-dark: #a67c1e;
+    --obsidian: #0f0d0b;
+    --ivory: #f9f6ee;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-ivory-50 text-obsidian-900 font-sans antialiased transition-colors duration-300;
+  }
+
+  .dark body {
+    @apply bg-obsidian-950 text-ivory-100;
+  }
+
+  * {
+    @apply box-border;
+  }
+
+  ::selection {
+    background: rgba(201, 162, 39, 0.3);
+    color: #0f0d0b;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-obsidian-900;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--gold);
+    border-radius: 3px;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-8 py-3.5 bg-gold-gradient text-obsidian-950 font-sans font-600 text-sm tracking-widest uppercase transition-all duration-300 hover:shadow-gold-lg hover:scale-105 active:scale-95;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center gap-2 px-8 py-3.5 border border-gold-500 text-gold-500 font-sans font-500 text-sm tracking-widest uppercase transition-all duration-300 hover:bg-gold-500 hover:text-obsidian-950 active:scale-95;
+  }
+
+  .glass-card {
+    @apply backdrop-blur-md bg-white/10 border border-white/20 shadow-glass;
+  }
+
+  .dark .glass-card {
+    @apply bg-obsidian-800/40 border-gold-800/30;
+  }
+
+  .section-title {
+    @apply font-display text-4xl md:text-5xl lg:text-6xl font-400 leading-tight;
+  }
+
+  .gold-text {
+    @apply text-transparent bg-clip-text bg-gold-gradient;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-3 bg-transparent border-b border-obsidian-300 dark:border-obsidian-600 text-obsidian-900 dark:text-ivory-100 font-sans text-sm placeholder-obsidian-400 dark:placeholder-obsidian-500 focus:outline-none focus:border-gold-500 transition-colors duration-300;
+  }
+
+  .ornament {
+    @apply inline-block w-16 h-px bg-gold-gradient mx-4 align-middle;
+  }
+
+  .pattern-bg {
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23c9a227' fill-opacity='0.04'%3E%3Cpath d='M30 0l30 30-30 30L0 30z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+
+  .animate-on-scroll {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+
+  .animate-on-scroll.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@layer utilities {
+  .font-600 {
+    font-weight: 600;
+  }
+
+  .font-400 {
+    font-weight: 400;
+  }
+
+  .font-500 {
+    font-weight: 500;
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
