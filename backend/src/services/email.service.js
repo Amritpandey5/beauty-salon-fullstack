@@ -1,20 +1,29 @@
-const nodemailer = require('nodemailer')
+const { Resend } = require('resend')
 const logger = require('../utils/logger')
 
-let transporter
+const resend = new Resend(process.env.RESEND_API_KEY)
 
-const getTransporter = () => {
-  if (transporter) return transporter
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT) || 587,
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  })
-  return transporter
+const sendEmail = async ({ to, subject, html }) => {
+  if (!process.env.RESEND_API_KEY) {
+    logger.warn(`[Email] Resend not configured — skipping email to ${to}`)
+    return
+  }
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: 'Lumière Salon <onboarding@resend.dev>', 
+      to,
+      subject,
+      html,
+    })
+
+    if (error) throw error
+
+    logger.info(`[Email] Sent to ${to}: ${subject}`)
+    return data
+  } catch (err) {
+    logger.error(`[Email] Failed to send to ${to}: ${err.message}`)
+  }
 }
 
 const baseTemplate = (content) => `
@@ -60,26 +69,22 @@ const baseTemplate = (content) => `
 </html>
 `
 
-const sendEmail = async ({ to, subject, html }) => {
-  if (!process.env.SMTP_USER) {
-    logger.warn(`[Email] SMTP not configured — skipping email to ${to}: ${subject}`)
-    return
-  }
-  try {
-    const info = await getTransporter().sendMail({
-      from: process.env.EMAIL_FROM || 'Lumière Salon <noreply@lumierekuwait.com>',
-      to,
-      subject,
-      html,
-    })
-    logger.info(`[Email] Sent to ${to}: ${subject} (${info.messageId})`)
-    return info
-  } catch (err) {
-    logger.error(`[Email] Failed to send to ${to}: ${err.message}`)
-  }
-}
 
 // ── Email templates ────────────────────────────────────────────────────────────
+
+const verificationEmail = (user, verificationUrl) =>
+  sendEmail({
+    to: user.email,
+    subject: 'Verify Your Email — Lumière Salon',
+    html: baseTemplate(`
+      <h2 style='color: #c9a227;'>Verify Your Email</h2>
+      <p>Dear <span class="gold">${user.name}</span>, thank you for creating an account with Lumière. Please verify your email address by clicking the button below:</p>
+      <div style="text-align:center;margin:32px 0">
+        <a href="${verificationUrl}" class="btn">Verify My Email</a>
+      </div>
+      <p style="font-size:12px;color:#524943">If you did not create this account, please ignore this email.</p>
+    `),
+  })
 
 const sendWelcomeEmail = (user) =>
   sendEmail({
@@ -193,6 +198,7 @@ const sendPasswordReset = (user, resetUrl) =>
   })
 
 module.exports = {
+  verificationEmail,
   sendWelcomeEmail,
   sendAppointmentConfirmation,
   sendAppointmentCancellation,

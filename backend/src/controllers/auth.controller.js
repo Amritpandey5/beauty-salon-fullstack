@@ -4,8 +4,9 @@ const catchAsync = require('../utils/catchAsync')
 const ApiError = require('../utils/ApiError')
 const respond = require('../utils/ApiResponse')
 const { setTokenCookies, clearTokenCookies, verifyRefreshToken } = require('../services/auth.service')
-const { sendWelcomeEmail, sendPasswordReset } = require('../services/email.service')
+const {verificationEmail, sendWelcomeEmail, sendPasswordReset } = require('../services/email.service')
 const logger = require('../utils/logger')
+const { log } = require('console')
 
 // POST /api/auth/register
 const register = catchAsync(async (req, res) => {
@@ -14,36 +15,140 @@ const register = catchAsync(async (req, res) => {
   const exists = await User.findOne({ email })
   if (exists) throw ApiError.conflict('An account with this email already exists')
 
-  const user = await User.create({ name, email, phone, password })
+  const user = await User.create({ name, email, phone, password });
 
-  const accessToken = user.signAccessToken()
-  const refreshToken = user.signRefreshToken()
-  user.refreshToken = refreshToken
-  user.lastLoginAt = new Date()
+  // generate verification token and save to user
+  const verificationToken = user.generateEmailVerificationToken();
+  
   await user.save({ validateBeforeSave: false })
 
-  setTokenCookies(res, accessToken, refreshToken)
-  sendWelcomeEmail(user).catch(() => {})
+
+  // send verification email
+  try {
+    const verificationUrl = `${process.env.CLIENT_URL}/verify-email?id=${user._id}&token=${verificationToken}`
+    await verificationEmail(user, verificationUrl)
+  } catch (error) {
+    console.error('Error sending verification email:', error)
+    await User.deleteOne({ _id: user._id }) // rollback user creation
+    throw ApiError.internal('Failed to send verification email. Please try again.')
+  }
 
   logger.info(`New user registered: ${email}`)
   respond(res).created(
-    { user: { id: user._id, name: user.name, email: user.email, role: user.role }, accessToken },
-    'Account created successfully'
+    { user: { id: user._id, name: user.name, email: user.email, role: user.role }},
+    'Account created successfully & verification email sent'
   )
 })
+
+// verify email
+const verifyEmail = catchAsync(async(req,res)=>{
+  const {id,token} = req.query;
+
+  if(!id || !token){
+    throw ApiError.badRequest('Invalid verification link')
+  }
+
+  const rawToken = token.replace(/ /g, '+') // Handle URL encoding issues
+  // console.log('Raw token from query:', token)
+  const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex')
+  // console.log('Hashed token:', hashedToken)
+
+
+  const userRecord = await User.findOne({
+  _id: id,
+  verificationToken: hashedToken,
+  verificationExpire: { $gt: Date.now() }
+}).select('+verificationToken +verificationExpire')
+
+console.log(userRecord);
+
+
+  if(!userRecord){
+    throw ApiError.badRequest('Verification link is invalid or has expired.Please resend verification.')
+  }
+
+  // Acitvate user and clear verification fields
+  userRecord.isEmailVerified = true;
+  userRecord.verificationToken = undefined;
+  userRecord.verificationExpire = undefined;
+  await userRecord.save({validateBeforeSave:false})
+
+
+  // generate tokens and set cookies
+  const accessToken = userRecord.signAccessToken()
+  const refreshToken = userRecord.signRefreshToken()
+  userRecord.refreshToken = refreshToken
+  userRecord.lastLoginAt = new Date()
+  await userRecord.save({ validateBeforeSave: false })
+  setTokenCookies(res, accessToken, refreshToken)
+
+  // send welcome email
+  try {
+    await sendWelcomeEmail(userRecord).catch(() => {})
+  } catch (error) {
+    console.error('Error sending welcome email:', error)
+  }
+
+  logger.info(`User email verified: ${userRecord.email}`)
+  respond(res).success(
+    { user: { id: userRecord._id, name: userRecord.name, email: userRecord.email, role: userRecord.role }, accessToken },
+    'Email verified successfully'
+  )
+});
+
+//---Resend verification email
+
+const resendVerification = catchAsync(async(req,res)=>{
+  const {id} = req.body;
+  const userRecord = await User.findOne({_id:id}).select('+verificationToken +verificationExpire');
+
+  if(!userRecord){
+    throw ApiError.badRequest('No account found with that email')
+  } 
+  if(userRecord.isEmailVerified){
+    throw ApiError.badRequest('Email is already verified. Please log in.')
+  }
+
+  // generate new verification token
+const rawVerificationToken = userRecord.generateEmailVerificationToken()
+
+await userRecord.save({ validateBeforeSave: false })
+
+  // send verification email
+
+  try{
+    await verificationEmail(userRecord, `${process.env.CLIENT_URL}/verify-email?id=${userRecord._id}&token=${rawVerificationToken}`)
+  }
+  catch(error){
+    console.error('Error sending verification email:', error)
+    throw ApiError.internal('Failed to send verification email. Please try again.')
+  }
+
+  logger.info(`Verification email resent: ${userRecord.email}`)
+  respond(res).success(null, 'Verification email resent. Please check your inbox.')
+
+
+})
+
+
 
 // POST /api/auth/login
 const login = catchAsync(async (req, res) => {
   const { email, password } = req.body
 
   const user = await User.findOne({ email }).select('+password +refreshToken')
+  if(!user){
+    throw ApiError.notFound('No account found with that email')
+  }
   if (!user || !(await user.comparePassword(password))) {
     throw ApiError.unauthorized('Invalid email or password')
   }
+  if (!user.isEmailVerified) throw ApiError.forbidden('Email not verified. Please verify your email.')
   if (!user.isActive) throw ApiError.forbidden('Account is deactivated. Contact support.')
 
   const accessToken = user.signAccessToken()
   const refreshToken = user.signRefreshToken()
+
   user.refreshToken = refreshToken
   user.lastLoginAt = new Date()
   await user.save({ validateBeforeSave: false })
@@ -75,6 +180,7 @@ const refresh = catchAsync(async (req, res) => {
   const accessToken = user.signAccessToken()
   const refreshToken = user.signRefreshToken()
   user.refreshToken = refreshToken
+  user.lastLoginAt = new Date()
   await user.save({ validateBeforeSave: false })
 
   setTokenCookies(res, accessToken, refreshToken)
@@ -162,6 +268,8 @@ const resetPassword = catchAsync(async (req, res) => {
 
 module.exports = {
   register,
+  verifyEmail,
+  resendVerification,
   login,
   refresh,
   logout,

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
 const bcrypt = require('bcryptjs')
+const crypto = require('crypto')
 const jwt = require('jsonwebtoken')
 const { ROLES } = require('../config/constants')
 
@@ -48,8 +49,12 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    emailVerificationToken: {
+    verificationToken: {
       type: String,
+      select: false,
+    },
+    verificationExpire: {
+      type: Date,
       select: false,
     },
     passwordResetToken: {
@@ -117,6 +122,20 @@ userSchema.methods.signRefreshToken = function () {
     process.env.JWT_REFRESH_SECRET,
     { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '30d' }
   )
+}
+
+// verification token 
+userSchema.methods.generateEmailVerificationToken = function () {
+  const rawToken = crypto.randomBytes(32).toString('hex')
+
+  this.verificationToken = crypto
+    .createHash('sha256')
+    .update(rawToken)
+    .digest('hex')
+
+  this.verificationExpire = Date.now() + 10 * 60 * 1000
+
+  return rawToken
 }
 
 // Virtual: initials

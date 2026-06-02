@@ -57,7 +57,7 @@ const appointmentSchema = new mongoose.Schema(
     // Confirmation
     confirmationNumber: {
       type: String,
-      unique: true,
+      // unique: true,
     },
   },
   {

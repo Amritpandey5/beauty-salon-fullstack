@@ -1,5 +1,22 @@
+process.env.NODE_ENV = 'test'
+process.env.AUTH_RATE_LIMIT_MAX = 10000
+
+
+jest.mock('../src/services/email.service', () => ({
+  verificationEmail: jest.fn().mockResolvedValue(true),
+  sendWelcomeEmail: jest.fn().mockResolvedValue(true),
+  sendPasswordReset: jest.fn().mockResolvedValue(true),
+  sendAppointmentConfirmation: jest.fn().mockResolvedValue(true),
+  sendAppointmentCancellation: jest.fn().mockResolvedValue(true),
+  sendAppointmentReminder: jest.fn().mockResolvedValue(true),
+  sendContactAcknowledgement: jest.fn().mockResolvedValue(true),
+}))
+
+
+
 const request = require('supertest')
 const mongoose = require('mongoose')
+const crypto = require('crypto')
 const app = require('../src/server')
 const User = require('../src/models/User')
 
@@ -29,17 +46,45 @@ const validUser = {
 }
 
 describe('POST /api/auth/register', () => {
-  it('registers a new user and returns tokens', async () => {
+  it('registers a new user and sends verification email', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send(validUser)
 
     expect(res.status).toBe(201)
     expect(res.body.success).toBe(true)
+
     expect(res.body.data.user.email).toBe(validUser.email)
-    expect(res.body.data.accessToken).toBeDefined()
-    expect(res.body.data.user.password).toBeUndefined()
+
+    expect(res.body.data.accessToken).toBeUndefined()
+
+    const createdUser = await User.findOne({ email: validUser.email })
+      .select('+verificationToken +verificationExpire')
+
+    expect(createdUser).toBeDefined()
+    expect(createdUser.verificationToken).toBeDefined()
+    expect(createdUser.isEmailVerified).toBe(false)
   })
+
+  it('fails registration if verification email sending fails', async () => {
+  const emailService = require('../src/services/email.service')
+
+  emailService.verificationEmail.mockRejectedValueOnce(new Error('Email failed'))
+
+  const res = await request(app)
+    .post('/api/auth/register')
+    .send({
+      name: 'Test User',
+      email: 'fail@test.com',
+      password: 'Test@1234',
+    })
+
+  expect(res.status).toBe(500)
+
+  const user = await User.findOne({ email: 'fail@test.com' })
+
+  expect(user).toBeNull()
+})
 
   it('rejects duplicate email', async () => {
     await User.create(validUser)
@@ -79,7 +124,10 @@ describe('POST /api/auth/register', () => {
 
 describe('POST /api/auth/login', () => {
   beforeEach(async () => {
-    await User.create(validUser)
+    await User.create({
+      ...validUser,
+      isEmailVerified: true,
+    })
   })
 
   it('logs in with correct credentials', async () => {
@@ -106,7 +154,109 @@ describe('POST /api/auth/login', () => {
       .post('/api/auth/login')
       .send({ email: 'nobody@lumiere.com', password: validUser.password })
 
-    expect(res.status).toBe(401)
+    expect(res.status).toBe(404)
+  })
+})
+
+describe('GET /api/auth/verify-email', () => {
+  let user
+  let rawToken
+
+  beforeEach(async () => {
+    rawToken = crypto.randomBytes(32).toString('hex')
+
+    const hashedToken = crypto
+      .createHash('sha256')
+      .update(rawToken)
+      .digest('hex')
+
+    user = await User.create({
+      ...validUser,
+      verificationToken: hashedToken,
+      verificationExpire: Date.now() + 10 * 60 * 1000,
+      isEmailVerified: false,
+    })
+  })
+
+  it('verifies user email with valid token', async () => {
+    const res = await request(app)
+      .get(`/api/auth/verify-email?id=${user._id}&token=${rawToken}`)
+
+    expect(res.status).toBe(200)
+    expect(res.body.success).toBe(true)
+
+    const updatedUser = await User.findById(user._id)
+
+    expect(updatedUser.isEmailVerified).toBe(true)
+    expect(updatedUser.verificationToken).toBeUndefined()
+  })
+
+  it('rejects invalid verification token', async () => {
+    const res = await request(app)
+      .get(`/api/auth/verify-email?id=${user._id}&token=wrongtoken`)
+
+    expect(res.status).toBe(400)
+    expect(res.body.success).toBe(false)
+  })
+
+  it('rejects expired verification token', async () => {
+    user.verificationExpire = Date.now() - 1000
+    await user.save({ validateBeforeSave: false })
+
+    const res = await request(app)
+      .get(`/api/auth/verify-email?id=${user._id}&token=${rawToken}`)
+
+    expect(res.status).toBe(400)
+    expect(res.body.success).toBe(false)
+  })
+})
+
+describe('POST /api/auth/resend-verification', () => {
+  let user
+
+  beforeEach(async () => {
+    user = await User.create({
+      ...validUser,
+      isEmailVerified: false,
+    })
+  })
+
+  it('resends verification email successfully', async () => {
+    const res = await request(app)
+      .post('/api/auth/resend-verification')
+      .send({ id: user._id })
+
+    expect(res.status).toBe(200)
+    expect(res.body.success).toBe(true)
+
+    const updatedUser = await User.findById(user._id).select(
+      '+verificationToken +verificationExpire'
+    )
+
+    expect(updatedUser.verificationToken).toBeDefined()
+  })
+
+  it('rejects resend for verified user', async () => {
+    user.isEmailVerified = true
+    await user.save()
+
+    const res = await request(app)
+      .post('/api/auth/resend-verification')
+      .send({ id: user._id })
+
+    expect(res.status).toBe(400)
+    expect(res.body.success).toBe(false)
+  })
+
+  it('rejects invalid user id', async () => {
+    const fakeId = new mongoose.Types.ObjectId()
+
+    const res = await request(app)
+      .post('/api/auth/resend-verification')
+      .send({ id: fakeId })
+
+    expect(res.status).toBe(400)
+    expect(res.body.success).toBe(false)
   })
 })
 
@@ -114,7 +264,10 @@ describe('GET /api/auth/me', () => {
   let token
 
   beforeEach(async () => {
-    const user = await User.create(validUser)
+    const user = await User.create({
+      ...validUser,
+      isEmailVerified: true,
+    })
     token = user.signAccessToken()
   })
 
@@ -143,7 +296,10 @@ describe('GET /api/auth/me', () => {
 
 describe('POST /api/auth/logout', () => {
   it('logs out and clears cookies', async () => {
-    const user = await User.create(validUser)
+    const user = await User.create({
+      ...validUser,
+      isEmailVerified: true,
+    })
     const token = user.signAccessToken()
 
     const res = await request(app)

@@ -12,6 +12,8 @@ const {
 } = require('../validators/auth.validators')
 
 router.post('/register',  authLimiter, registerRules, validate, ctrl.register)
+router.get('/verify-email', ctrl.verifyEmail)
+router.post('/resend-verification', authLimiter, ctrl.resendVerification)
 router.post('/login',     authLimiter, loginRules,    validate, ctrl.login)
 router.post('/refresh',   ctrl.refresh)
 router.post('/logout',    protect, ctrl.logout)
