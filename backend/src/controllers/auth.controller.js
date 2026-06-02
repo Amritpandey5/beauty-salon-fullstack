@@ -60,7 +60,7 @@ const verifyEmail = catchAsync(async(req,res)=>{
   verificationExpire: { $gt: Date.now() }
 }).select('+verificationToken +verificationExpire')
 
-console.log(userRecord);
+// console.log(userRecord);
 
 
   if(!userRecord){
