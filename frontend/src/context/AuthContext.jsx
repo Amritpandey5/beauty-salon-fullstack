@@ -53,7 +53,15 @@ export function AuthProvider({ children }) {
     setAccessToken(res.data.accessToken)
     setUser(res.data.user)
     return res.data.user
-  }, [])
+  }, []);
+
+  const verifiyEmail = useCallback(async (id, token) => {
+    await authApi.verifyEmail(id, token)
+  }, []);
+  
+  const resendVerification = useCallback(async (email) => {
+    await authApi.resendVerification(email)
+  }, []);
 
   const logout = useCallback(async () => {
     try { await authApi.logout() } catch { }
@@ -76,7 +84,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, loading,
       isAuthenticated, isAdmin,
-      login, register, logout, updateUser,forgotPassword
+      login, register,verifiyEmail,resendVerification, logout, updateUser,forgotPassword
     }}>
       {children}
     </AuthContext.Provider>

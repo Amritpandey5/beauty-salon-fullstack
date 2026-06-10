@@ -21,6 +21,7 @@ import { ToastProvider } from './components/Toast'
 import ScrollToTop from './components/ScrollToTop'
 import ProtectedRoute from './components/ProtectedRoute'
 import PageTransition from './components/PageTransition'
+import { VerifyEmail } from './pages/VerifyEmail'
 
 export const ThemeContext = createContext()
 export function useTheme() { return useContext(ThemeContext) }
@@ -64,11 +65,13 @@ export default function App() {
                   <PageTransition><ChangePasswordPage/></PageTransition>
                 </ProtectedRoute>
               } />
+
+              <Route path="/verify-email" element={
+                <PageTransition><VerifyEmail/></PageTransition>
+              } />
               
               <Route path="/reset-password" element={
-                <ProtectedRoute allowedRoles={['admin','client']}>
-                  <PageTransition><ResetPasswordPage/></PageTransition>
-                </ProtectedRoute>
+                <PageTransition><ResetPasswordPage/></PageTransition>
               } />
 
               <Route path="/unauthorized" element={<Unauthorized />} />

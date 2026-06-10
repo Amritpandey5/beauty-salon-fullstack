@@ -7,6 +7,12 @@ export const authApi = {
   login: (data) =>
     api.post('/auth/login', data),
 
+  verifyEmail: (id,token) =>
+    api.get(`/auth/verify-email?id=${id}&token=${token}`),
+
+  resendVerification: (id) =>
+    api.post('/auth/resend-verification', { id }),   
+
   logout: () =>
     api.post('/auth/logout'),
 

@@ -73,7 +73,8 @@ const request = async (endpoint, options = {}, retry = true) => {
     } catch {
       clearAccessToken()
       window.dispatchEvent(new CustomEvent('auth:expired'))
-      throw { message: 'Session expired. Please log in again.', status: 401 }
+      console.log(res.message);
+      throw { message: res.message, status: 401 }
     }
   }
 

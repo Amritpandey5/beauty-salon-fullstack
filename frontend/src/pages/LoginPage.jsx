@@ -58,6 +58,8 @@ export default function LoginPage() {
       addToast('Welcome back to Lumière!', 'success')
       navigate(from, { replace: true })
     } catch (err) {
+      // console.log(err)
+      // console.log('Login error:', err.message)
       addToast(err.message || 'Login failed', 'error')
     } finally {
       setLoading(false)
