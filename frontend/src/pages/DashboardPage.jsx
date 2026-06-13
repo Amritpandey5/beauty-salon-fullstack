@@ -485,7 +485,15 @@ function AppointmentRow({
           </span>
         </div>
 
-        <p className="font-sans text-sm text-obsidian-500 dark:text-obsidian-400">
+        {isAdmin ? (
+        <p  className="font-display text-base text-obsidian-900  dark:text-ivory-100">
+        Customer Name  <span className="font-sans text-sm text-obsidian-500 dark:text-obsidian-400" >{appt.client?.name || 'Client Name'}</span>
+        </p>
+       ): <p  className="font-display text-base text-obsidian-900  dark:text-ivory-100">
+        Name  <span className="font-sans text-sm text-obsidian-500 dark:text-obsidian-400" >{appt.client?.name || 'Client Name'}</span>
+        </p>}
+
+        <p className="font-sans text-sm text-obsidian-500 dark:text-obsidian-400"> 
           {appt.date
             ? new Date(appt.date).toLocaleDateString('en-KW', {
                 weekday: 'short',
